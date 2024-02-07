@@ -55,8 +55,7 @@ def build_conn_string(config: ConfigParser, section: str, dbengine: str) -> str:
     user = config.get(section, "user")
     password = config.get(section, "password")
     database = config.get(section, "database")
-    dbengine = config.get(section, "dbengine")
-    
+        
     conn_str = f"{dbengine}://{user}:{password}@{host}:{port}/{database}"
     return conn_str
 
