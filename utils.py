@@ -1,6 +1,11 @@
 import redshift_connector
+import sqlalchemy
+import psycopg2
+from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
 from pathlib import Path
 from configparser import ConfigParser
+
 
 def read_api_credentials(file_path: Path, section: str) -> dict:
     """
@@ -29,9 +34,9 @@ def read_config_file(file_path: str) -> ConfigParser:
     Returns:
     ConfigParser: Objeto con la configuración del archivo. 
     """
-    config2 = ConfigParser()
-    config2.read(file_path)
-    return config2
+    config = ConfigParser()
+    config.read(file_path)
+    return config
 
 def build_conn_string(config: ConfigParser, section: str, dbengine: str) -> str:
     """
@@ -50,6 +55,7 @@ def build_conn_string(config: ConfigParser, section: str, dbengine: str) -> str:
     user = config.get(section, "user")
     password = config.get(section, "password")
     database = config.get(section, "database")
+    dbengine = config.get(section, "dbengine")
     
     conn_str = f"{dbengine}://{user}:{password}@{host}:{port}/{database}"
     return conn_str

@@ -1,9 +1,12 @@
 import requests
 import json
 import pandas as pd
-from datetime import datetime, timedelta
+import sqlalchemy
+import psycopg2
 import pytz
-from utils import read_api_credentials, read_config_file, get_redshift_connection, build_conn_string
+from sqlalchemy import create_engine
+from datetime import datetime, timedelta
+from utils import read_api_credentials, read_config_file, get_redshift_connection, build_conn_string, conn_to_db
 
 
 # (old) Opción 1 de autenticación: Leer el archivo creado "config.json" para obtener el api token y autenticar correctamente.
@@ -37,15 +40,15 @@ def consolidate(endpoint, description):
     start = datetime.now(pytz.timezone('America/Buenos_Aires')) - timedelta(days=30)
     end = datetime.now(pytz.timezone('America/Buenos_Aires')) - timedelta(days=1)
     
-    if response.status_code == 200:         
+    if response.status_code == 200:
+        print(f'Status code: {response.status_code}')         
         data = response.json()        
         df = pd.DataFrame(data)        
         df.rename(columns={'d': 'Date', 'v': 'Value'}, inplace= True)        
         df['Date'] = pd.to_datetime(df['Date'])
         df['Date'] = df['Date'].dt.tz_localize('America/Buenos_Aires')        
         df['Concept'] = description        
-        filtered_df = df[(df['Date'] >= start) & (df['Date'] <= end)]                  
-        print(filtered_df)
+        filtered_df = df[(df['Date'] >= start) & (df['Date'] <= end)]                
         return filtered_df
                 
     else: 
@@ -70,12 +73,13 @@ for endpoint, description in endpoints:
     df = consolidate(endpoint, description)
     if df is not None and not df.empty:
         dataframes.append(df)
+        
 
 ## Unificación de dataframes, generando un index nuevo y ordenando las columnas. Si no se obtuvo información, se arroja un mensaje que lo comenta. 
 if dataframes:
     df_final = pd.concat(dataframes, ignore_index=True)
     df_final = df_final[['Date', 'Concept', 'Value']]
-
+    print(df_final)
 else: 
     print("No se lograron recolectar datos de los endpoints.")
 
@@ -88,8 +92,8 @@ config_file = read_config_file("config.ini")
 conn_string = build_conn_string(config_file, "redshift", "postgresql")
 
 ## Con el string de conexión, establecemos la conexión para interactuar con al base de datos.
-conn = get_redshift_connection("config.ini", "redshift")
-cursor = conn.cursor()
+conn = conn_to_db(conn_string)
+
 
 # CREACIÓN DE TABLA
 try:
@@ -97,10 +101,10 @@ try:
     print("Intentando crear la tabla en el esquema...")
     
     ## Se agrega esta línea para pruebas durante la preparación del proyecto. 
-    cursor.execute("DROP TABLE IF EXISTS tomasmartindl_coderhouse.bcra;")
+    conn.execute("DROP TABLE IF EXISTS tomasmartindl_coderhouse.bcra;")
     
     ## En este caso se crea la tabla Date como clave de distribución y de ordenamiento. En un caso en el cual, por ejemplo, las consultas estén más relacionadas con "concept", porque se requiere hacer joins sobre registros por cada concepto, hubiese elegido "concept" como distkey, de estilo de distribución KEY. 
-    cursor.execute("""
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS tomasmartindl_coderhouse.bcra(
             date DATE DISTKEY,
             concept VARCHAR(50),
@@ -111,29 +115,34 @@ try:
     """)
     
     # Debug Print para asegurar que se creó la tabla o se detectó una existente
-    print("La tabla ha sido creada o ya existía.")
+    print("La tabla ha sido creada.")
     
-    conn.commit()
-    print("Cambios confirmados en la base de datos.")
 
 # Debug info: detección de errores
 except Exception as e:
     print("Ocurrió un error al intentar crear la tabla:")
     print(e)
 
-# Cierra el cursor y la conexión
+# Inserción de datos de "df_final".
+try:
+    df_final.to_sql(
+        "bcra",
+        conn,
+        schema="tomasmartindl_coderhouse",
+        if_exists="append",
+        method="multi",
+        chunksize=200,
+        index=False
+    )
+
+    # Debug print: si el código SQL se ejecuta sin excepciones, muestra el mensaj de éxito. 
+    print("La inserción de datos fue realizada con éxito")
+
+except Exception as e:
+    print("Ocurrión un error durante la inserción de datos: ")
+    print(e)
+    
+# Cierra la conexión
 finally:
-    cursor.close()
     conn.close()
     print("Conexión cerrada.")
-
-# Inserción de datos de "df_final". Todavía no finalizado, debo acomodarlo con sqlalchemy
-#df_final.to_sql(
-#    "bcra",
-#    ,
-#    schema="tomasmartindl_coderhouse",
-#    if_exists="append",
-#    method="multi",
-#    chunksize=100,
-#    index=False
-#)
