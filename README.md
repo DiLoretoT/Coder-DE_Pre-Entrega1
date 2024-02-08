@@ -20,3 +20,4 @@ Para ejecutar el script principal, ejecutar el siguiente comando:
 
     python bcra-consolidate.py
 
+NOTA: Actualmente trabajo en un equipo de infraestructura. No estoy en contacto diaria con herramientas como Python, lenguaje SQL, GitHub, y demás temas del curso. Si algo no está de acuerdo a las buenas prácticas de cómo compartir este tipo de trabajos. Estuve consultando e investigando y creo que se puede entender el código con los comentarios que agregué y la manera de ejecutarlo con este README. Además de la corrección del trabajo, agradezco cualquier feedback al respecto!
